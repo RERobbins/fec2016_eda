@@ -1,1 +1,1 @@
-# fec2016_eda
+An exploratory data analysis of a portion of the Federal Elections Commission 2016 data set.
