@@ -24,7 +24,7 @@ theme_set(theme_minimal())
 ```
 # Introduction
 
-The w203 Unit 10 homework assignment revolves around some of the Federal Election Commission 2016 datasets available in the `fec16`  R package.  As I worked through that assignment I noticed several anomalies.  In the wake of the assignment I decided to go back and take a much closer look at the data.  This document summarizes what I found.  This is a work in progress.  I have identified what I believe to be the most meaningful issue in the data, however, as noted in Section 4.6, there are still issues to review.
+The w203 Unit 10 homework assignment revolves around some of the Federal Election Commission 2016 datasets available in the `fec16`  R package.  As I worked through that assignment I noticed several anomalies.  In the wake of the assignment I decided to go back and take a much closer look at the data.  This document summarizes what I found.  This is a work in progress.  I have identified what I believe to be the most meaningful issue in the data, however, as noted in Section 4.5, there are still issues to review.
 
 # Setup
 
@@ -299,7 +299,7 @@ vote_plot_2
 ```
 
 
-Figure \@ref(fig:revisited-histogram) reproduces the histogram from \@ref(fig:preliminary-histogram) using the refined dataset.  The asymmetric mass on the left hand side of the histogram is no longer present.  The histogram appears to be much more symetric.  However, we now appear to have a few candidates receiving more than 100% of the vote in their races...
+Figure \@ref(fig:revisited-histogram) reproduces the histogram from Figure \@ref(fig:preliminary-histogram) using the refined dataset.  The asymmetric mass on the left hand side of the histogram is no longer present.  The histogram appears to be much more symmetric.  However, we now appear to have a few candidates receiving more than 100% of the vote in their races...
 
 # What About Homework 10?
 
