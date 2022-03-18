@@ -204,7 +204,7 @@ The refined date frame can be derived from the original as follows:
 
 ```{r dedupe df, message=FALSE}
 df.deduped <- df %>%
-  group_by(cand_id, cand_name, pty_cd, incumbent, won, ttl_disb) %>%
+  group_by(cand_id, cand_name, pty_cd, incumbent, won, ttl_disb, state) %>%
   summarise (general_votes = sum(general_votes),
              general_percent = sum(general_percent),
              .groups = "keep")
@@ -281,8 +281,6 @@ df.deduped %>% filter (cand_id %in% redundant.ids(df.deduped)$cand_id)
 
 ## Revisiting that Histogram
 
-
-
 ```{r revisited-histogram, fig.cap="Revised Voting Percentages", fig.width=10, fig.height=3, echo=FALSE}
 vote_plot_2 <- df.deduped %>%
   ggplot() +
@@ -299,7 +297,9 @@ vote_plot_2
 ```
 
 
-Figure \@ref(fig:revisited-histogram) reproduces the histogram from Figure \@ref(fig:preliminary-histogram) using the refined dataset.  The asymmetric mass on the left hand side of the histogram is no longer present.  The histogram appears to be much more symmetric.  However, we now appear to have a few candidates receiving more than 100% of the vote in their races...
+Figure \@ref(fig:revisited-histogram) reproduces the histogram from Figure \@ref(fig:preliminary-histogram) using the refined dataset.  The asymmetric mass on the left hand side of the histogram is no longer present.  The histogram appears to be much more symmetric.  
+
+However, we now appear to have a few candidates receiving more than 100% of the vote in their races.  That suggests that there are cases where our mitigation approach is not warranted, *i.e.*, where the correct number of votes and percentages cannot be derived by adding the redundant observations.
 
 # What About Homework 10?
 
