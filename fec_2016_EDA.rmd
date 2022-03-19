@@ -278,7 +278,6 @@ That leaves one person with duplicate entries in the dataset.  That distinction 
 ```{r, echo=FALSE}
 df.deduped %>% filter (cand_id %in% redundant.ids(df.deduped)$cand_id)
 ```
-
 ## Revisiting that Histogram
 
 ```{r revisited-histogram, fig.cap="Revised Voting Percentages", fig.width=10, fig.height=3, echo=FALSE}
@@ -296,10 +295,143 @@ vote_plot_2 <- df.deduped %>%
 vote_plot_2
 ```
 
-
 Figure \@ref(fig:revisited-histogram) reproduces the histogram from Figure \@ref(fig:preliminary-histogram) using the refined dataset.  The asymmetric mass on the left hand side of the histogram is no longer present.  The histogram appears to be much more symmetric.  
 
 However, we now appear to have a few candidates receiving more than 100% of the vote in their races.  That suggests that there are cases where our mitigation approach is not warranted, *i.e.*, where the correct number of votes and percentages cannot be derived by adding the redundant observations.
+
+# Vote Totals, Write In Votes ansd Uncontested Elections
+
+Figure \@ref(fig:revisited-histogram) suggests we should take a closer look at the voting data contained in the `results_house` dataset.  We should not see anyone with a vote percentage that exceeds 100%.  In addition, it's reasonable to expect that in most cases, the sum of the votes received by candidates on the ballot will be less than total votes cast in order to account for write in candidates.  Finally, we should think about uncontested elecetions.  We explore each of these concepts below.
+
+## Vote Totals
+
+We can derive the implied total number of votes cast from the number of votes received by a candidate and the percentage of votes received by that candidate, *i.e.,* $votes\_cast\ = \frac{general\_votes}{general\_percent}$.  We would expect that number to be the same when calcuilated across every observation for a particular race.
+
+First, let's see votes cast for some observations.
+
+```{r derive votes cast, include=TRUE}
+results_house %>%
+  drop_na(general_votes) %>%
+  mutate (votes_cast = general_votes/general_percent) %>%
+  select (state, district_id, cand_id, general_votes, general_percent, votes_cast)
+```
+That looks good.  The rows for a stete and district pair imply a consistent number of votes cast for the candidates running in that particular contest.
+
+Next we calculate the number of unique votes cast totals for each contest.
+
+```{r derive unique votes cast per contest, include=TRUE}
+results_house %>%
+  drop_na(general_votes) %>%
+  mutate (votes_cast = general_votes/general_percent) %>%
+  group_by(state, district_id) %>%
+  summarise(unique_votes_cast = length(unique(votes_cast)), .groups = "keep")
+```
+That sample shows a consistent number for the contests shown.  Let's look for exceptions.
+
+```{r look for suspicious contests, include=TRUE}
+results_house %>%
+  drop_na(general_votes) %>%
+  mutate (votes_cast = general_votes/general_percent) %>%
+  group_by(state, district_id) %>%
+  summarise(unique_votes_cast = length(unique(votes_cast)), .groups = "keep") %>%
+  filter(unique_votes_cast > 1)
+```
+That test shows more than a few contests where we appear to be getting inconsistent total votes cast numbers.  Perhaps this is due to rounding errors.  Let's round the votes cast number to the nearest integer.
+
+```{r look for suspicious contests after rounding to the nearest integer, include=TRUE}
+results_house %>%
+  drop_na(general_votes) %>%
+  mutate (votes_cast = round(general_votes/general_percent, 0)) %>%
+  group_by(state, district_id) %>%
+  summarise(unique_votes_cast = length(unique(votes_cast)), .groups = "keep") %>%
+  filter(unique_votes_cast > 1)
+```
+We are down to just suspicious contests.  Let's take a closer look.
+
+```{r looking at the suspicious contests, include=TRUE}
+results_house %>%
+  drop_na(general_votes) %>%
+  mutate (votes_cast = round(general_votes/general_percent, 0)) %>%
+  group_by(state, district_id) %>%
+  summarise(unique_votes_cast = length(unique(votes_cast)), 
+            unique_vote_list = paste(unique(votes_cast), collapse=", "),
+            .groups = "keep") %>%
+  filter(unique_votes_cast > 1)
+```
+It seems that we were unable to calculate the total votes cast in some instances because the denominator, `general_percent` was missing.  Let's see.
+
+```{r miossing general percentages, include=TRUE}
+results_house %>%
+  drop_na(general_votes) %>%
+  filter(is.na (general_percent)) %>%
+  select (state, district_id, cand_id, general_votes, general_percent)
+```
+So we have two rows missing the percentage of votes received by the candidate.
+
+## Write In Votes
+
+Now that we have confirmed that the data for the candidates participating in a contest implies a consistent total number of votes cast in the election, let's compare the total number of votes accounted for in each contest with the number of votes cast that we have derived.  When the numbers match that means that there are no write in ballots included in the observations for that contest.  When the total votes recorded is less than the total vote cast number we expect for that election the deficit represents either missing candidates or write in ballots.  The total number of votes recorded should never exceed the votes cast number we recorded.
+
+```{r calculate votes recorded per race, include=TRUE}
+vote_reconciliation <- results_house %>%
+  drop_na(general_votes) %>%
+  mutate (implied_votes_cast = round(general_votes/general_percent, 0)) %>%
+  group_by(state, district_id) %>%
+  summarise(implied_votes_cast = max(implied_votes_cast, na.rm=TRUE),
+            votes_recorded = sum(general_votes),
+            vote_deficit = implied_votes_cast - votes_recorded,
+            .groups = "keep")
+
+summary(vote_reconciliation$vote_deficit)
+
+sum(vote_reconciliation$vote_deficit == 0)
+sum(between(vote_reconciliation$vote_deficit, 1, 1000))
+sum(between(vote_reconciliation$vote_deficit, 1001, 10000))
+sum(vote_reconciliation$vote_deficit > 10000)
+vote_reconciliation %>% filter (vote_deficit > 10000)
+```
+  We have non-conforming district identification numbers in the dataset.  Let's take a look.
+  
+```{r}
+results_house %>% 
+  drop_na(general_votes) %>%
+  filter (!str_detect(district_id, "^[:digit:]+$")) %>%
+  group_by (state, district_id) %>%
+  summarise(count = n(), .groups="keep")
+```
+
+Since we have been grouping by state and district id numbers, we should fix these labels.
+
+```{r}
+vote_reconciliation <- results_house %>%
+  drop_na(general_votes) %>%
+  mutate (implied_votes_cast = round(general_votes/general_percent, 0)) %>%
+  mutate (district_id = str_pad(str_extract(district_id, "[:digit:]{1,2}"), 
+                                2, pad="0")) %>%
+  group_by(state, district_id) %>%
+  summarise(implied_votes_cast = max(implied_votes_cast, na.rm=TRUE),
+            votes_recorded = sum(general_votes),
+            vote_deficit = implied_votes_cast - votes_recorded,
+            .groups = "keep")
+
+sum(vote_reconciliation$vote_deficit == 0)
+sum(between(vote_reconciliation$vote_deficit, 1, 1000))
+sum(between(vote_reconciliation$vote_deficit, 1001, 10000))
+sum(vote_reconciliation$vote_deficit > 10000)
+vote_reconciliation %>% filter (vote_deficit > 10000)
+```
+
+Let's repeat out vote total integrity test.
+
+```{r look again for suspicious contests after rounding to the nearest integer, include=TRUE}
+results_house %>%
+  drop_na(general_votes) %>%
+  mutate (votes_cast = round(general_votes/general_percent, 0)) %>%
+  group_by(state, district_id) %>%
+  summarise(unique_votes_cast = length(unique(votes_cast)), .groups = "keep") %>%
+  filter(unique_votes_cast > 1)
+```
+No changes there.
 
 # What About Homework 10?
 
