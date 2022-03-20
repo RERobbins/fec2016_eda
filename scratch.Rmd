@@ -1,0 +1,57 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r set defaults, echo=FALSE, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+```
+
+```{r install fec16 if necessary and load libraries, echo=FALSE, include=FALSE, message=FALSE}
+if (!require("fec16")) install.packages("fec16")
+library(tidyverse)
+library(knitr)
+library(patchwork)
+library(fec16)
+theme_set(theme_minimal())
+```
+
+
+```{r load data}
+campaigns <- fec16::campaigns
+candidates <- fec16::candidates
+results_house <- fec16::results_house
+mit <- read_csv("~/fec2016/dataverse_files/1976-2020-house.csv")
+```
+
+```{r build working dataframe}
+df <- results_house %>% 
+  drop_na(general_votes) %>%
+  select (cand_id, incumbent, general_votes, general_percent, won, state, district_id)
+```
+
+```{r}
+feic.district_counts <- results_house %>%
+  drop_na(general_votes) %>%
+  mutate (district_id = 
+            str_pad(
+              str_extract(district_id, "[:digit:]{1,2}"),
+              2, 
+              pad="0")) %>%
+  group_by(state) %>% 
+  summarize(dist_count=length(unique(district_id)),
+            districts=paste(unique(district_id), collapse=", "))
+
+mit.district_counts <- mit %>%
+  filter(year==2016) %>%
+  group_by(state_po) %>% 
+  summarize(dist_count=length(unique(district)),
+            districts=paste(unique(district), collapse=", "))
+
+joined.district_counts <- full_join(mit.district_counts, feic.district_counts,
+                                    by = c("state_po" = "state"))
+
+differences <- joined.district_counts %>%
+  filter(is.na(dist_count.x) | dist_count.x != dist_count.y)
+```
