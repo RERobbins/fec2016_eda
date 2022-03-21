@@ -27,9 +27,9 @@ mit <- read_csv("~/fec2016/dataverse_files/1976-2020-house.csv")
 ```{r build working dataframe}
 results_house.refined <- results_house %>% 
 
-  # The dataset includes full term races (the norm) and a handlfuil of
-  # races for unexpired terms.  We will eliminate the races for unexpired
-  # terms
+  # The dataset includes full term races (the norm) and several races
+  # for unexpired terms.  We eliminate the races for unexpired terms, as
+  # they are special elections and separate from the full term elections.
   
   filter (!grepl ("UNEXPIRED", district_id)) %>%
   
@@ -53,11 +53,19 @@ results_house.refined <- results_house %>%
   # District of Columbia, a resident commissioner representing Puerto Rico, 
   # as well as one delegate for each of the other four permanently inhabited 
   # U.S. territories: American Samoa, Guam, the Northern Mariana Islands and 
-  # the U.S. Virgin Islands.
+  # the U.S. Virgin Islands.  We create a new indicator for those races.
   
   mutate (non_voting = state %in% c("AS", "DC", "GU", "MP", "PR", "VI"),
           .after = "district_id") %>%
 
+  # Peter King, candidate H2NY03089 was the incumbent in the 2nd district of NY.
+  # He also won the general election for that seat.  A few rows in the dataset 
+  # indicate that he was not the incumbet and that he lost.  We correct that.
+  # The correction is needed for the next transformation to work correctly.
+  
+  mutate (incumbent = ifelse (cand_id == "H2NY03089", TRUE, incumbent)) %>%
+  mutate (won = ifelse (cand_id == "H2NY03089", TRUE, won)) %>%
+  
   # Some states allow candidates to appear on multiple party lines, separate 
   # vote totals are indicated for each party.  Therefore, for analysis that 
   # involves candidate totals, it is necessary to aggregate across all party 
@@ -68,11 +76,29 @@ results_house.refined <- results_house %>%
   group_by (state, district_id, non_voting, cand_id, incumbent, won) %>%
   summarise(general_votes=sum(general_votes), 
             general_percent=sum(general_percent),
+            votes_cast=general_votes/general_percent,
+            party.labels = paste(unique(party), collapse=", "),
             .groups = "keep")
+
+# Now that the results dataset has been cleaned up, let's count the number of
+# candidates.  This is useful in case we want to analyze uncontested elections.
+
+candidate_counts <- results_house.refined %>% 
+  group_by(state, district_id) %>%
+  summarise(candidate_count = length(unique(cand_id)),
+            .groups = "keep")
+
+results_house.refined <- inner_join(results_house.refined, candidate_counts,
+                                    by = c("state", "district_id"))
+
+df <- inner_join(campaigns, results_house.refined, by="cand_id") %>%
+  select (state, district_id, candidate_count,non_voting, 
+          cand_id, cand_name, pty_cd, incumbent, won, 
+          general_votes, general_percent, votes_cast, ttl_disb)
 ```
 
 ```{r}
-feic.district_counts <- results_house.refined %>%
+feic.district_counts <- df %>%
   group_by(state) %>% 
   summarize(dist_count=length(unique(district_id)),
             districts=paste(unique(district_id), collapse=", "))
@@ -89,16 +115,4 @@ joined.district_counts <-
 
 differences <- joined.district_counts %>%
   filter(is.na(dist_count.x) | dist_count.x != dist_count.y)
-
-candidate_counts <- results_house.refined %>% 
-  group_by(state, district_id) %>%
-  summarise(candidate.count = length(unique(cand_id)),
-            .groups = "keep")
-
-results_house.refined <- inner_join(results_house.refined, candidate_counts) 
-
-df <- inner_join(campaigns, results_house.refined) %>%
-  select (state, district_id, candidate.count,non_voting, 
-          cand_id, cand_name, pty_cd, incumbent, won, 
-          general_votes, general_percent, ttl_disb)
 ```
