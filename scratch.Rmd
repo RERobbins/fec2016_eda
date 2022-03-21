@@ -101,5 +101,4 @@ df <- inner_join(campaigns, results_house.refined) %>%
   select (state, district_id, candidate.count,non_voting, 
           cand_id, cand_name, pty_cd, incumbent, won, 
           general_votes, general_percent, ttl_disb)
-
 ```
