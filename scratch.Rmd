@@ -27,7 +27,6 @@ mit <- read_csv("~/fec2016/dataverse_files/1976-2020-house.csv")
 ```{r build working dataframe}
 results_house.refined <- results_house %>% 
 
-  
   # The dataset includes full term races (the norm) and a handlfuil of
   # races for unexpired terms.  We will eliminate the races for unexpired
   # terms
@@ -93,5 +92,14 @@ differences <- joined.district_counts %>%
 
 candidate_counts <- results_house.refined %>% 
   group_by(state, district_id) %>%
-  summarise(candidate.count = length(unique(cand_id)))
+  summarise(candidate.count = length(unique(cand_id)),
+            .groups = "keep")
+
+results_house.refined <- inner_join(results_house.refined, candidate_counts) 
+
+df <- inner_join(campaigns, results_house.refined) %>%
+  select (state, district_id, candidate.count,non_voting, 
+          cand_id, cand_name, pty_cd, incumbent, won, 
+          general_votes, general_percent, ttl_disb)
+
 ```
