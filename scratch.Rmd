@@ -17,8 +17,7 @@ library(fec16)
 theme_set(theme_minimal())
 ```
 
-
-```{r load data}
+```{r load data, message=FALSE}
 campaigns <- fec16::campaigns
 candidates <- fec16::candidates
 results_house <- fec16::results_house
@@ -26,19 +25,55 @@ mit <- read_csv("~/fec2016/dataverse_files/1976-2020-house.csv")
 ```
 
 ```{r build working dataframe}
-df <- results_house %>% 
-  drop_na(general_votes) %>%
-  select (cand_id, incumbent, general_votes, general_percent, won, state, district_id)
+results_house.refined <- results_house %>% 
+
+  
+  # The dataset includes full term races (the norm) and a handlfuil of
+  # races for unexpired terms.  We will eliminate the races for unexpired
+  # terms
+  
+  filter (!grepl ("UNEXPIRED", district_id)) %>%
+  
+  # Fix non-conforming district_id labels by extracting the district number
+  # and preserving it as a two character string padded with leading zeros.
+  # These labels reference full term races in the presence of unexpired
+  # term races, which we just eliminated.
+  
+  mutate (district_id = str_pad(str_extract(district_id, "[:digit:]{1,2}"),
+                                2, 
+                                pad="0")) %>%
+
+  # There are a few races where no votes were recorded because a candidate
+  # ran unopposed, so rather than drop rows without votes recorded, we
+  # keep any row for a winner including those who did not receive votes as well
+  # as any row where a candidate received votes in the general election.
+
+  filter (won | !is.na(general_votes)) %>%
+  
+  # There are six non-voting members: a delegate representing the 
+  # District of Columbia, a resident commissioner representing Puerto Rico, 
+  # as well as one delegate for each of the other four permanently inhabited 
+  # U.S. territories: American Samoa, Guam, the Northern Mariana Islands and 
+  # the U.S. Virgin Islands.
+  
+  mutate (non_voting = state %in% c("AS", "DC", "GU", "MP", "PR", "VI"),
+          .after = "district_id") %>%
+
+  # Some states allow candidates to appear on multiple party lines, separate 
+  # vote totals are indicated for each party.  Therefore, for analysis that 
+  # involves candidate totals, it is necessary to aggregate across all party 
+  # lines within a district.  For analysis that focuses on two-party vote 
+  # totals, it is necessary to account for major party candidates who receive 
+  # votes under multiple party labels.
+  
+  group_by (state, district_id, non_voting, cand_id, incumbent, won) %>%
+  summarise(general_votes=sum(general_votes), 
+            general_percent=sum(general_percent),
+            .groups = "keep")
 ```
 
 ```{r}
-feic.district_counts <- results_house %>%
-  drop_na(general_votes) %>%
-  mutate (district_id = 
-            str_pad(
-              str_extract(district_id, "[:digit:]{1,2}"),
-              2, 
-              pad="0")) %>%
+feic.district_counts <- results_house.refined %>%
   group_by(state) %>% 
   summarize(dist_count=length(unique(district_id)),
             districts=paste(unique(district_id), collapse=", "))
@@ -49,9 +84,14 @@ mit.district_counts <- mit %>%
   summarize(dist_count=length(unique(district)),
             districts=paste(unique(district), collapse=", "))
 
-joined.district_counts <- full_join(mit.district_counts, feic.district_counts,
-                                    by = c("state_po" = "state"))
+joined.district_counts <- 
+  full_join(mit.district_counts, feic.district_counts, 
+            by = c("state_po" = "state"))
 
 differences <- joined.district_counts %>%
   filter(is.na(dist_count.x) | dist_count.x != dist_count.y)
+
+candidate_counts <- results_house.refined %>% 
+  group_by(state, district_id) %>%
+  summarise(candidate.count = length(unique(cand_id)))
 ```
