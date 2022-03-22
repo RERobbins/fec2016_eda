@@ -360,7 +360,7 @@ results_house %>%
 ```
 It seems that we were unable to calculate the total votes cast in some instances because the denominator, `general_percent` was missing.  Let's see.
 
-```{r miossing general percentages, include=TRUE}
+```{r missing general percentages, include=TRUE}
 results_house %>%
   drop_na(general_votes) %>%
   filter(is.na (general_percent)) %>%
@@ -432,6 +432,100 @@ results_house %>%
   filter(unique_votes_cast > 1)
 ```
 No changes there.
+
+# Using the rebuilt dataframe
+
+```{r build working dataframe}
+results_house.refined <- results_house %>% 
+
+  # The dataset includes full term races (the norm) and several races
+  # for unexpired terms.  We eliminate the races for unexpired terms, as
+  # they are special elections and separate from the full term elections.
+  
+  filter (!grepl ("UNEXPIRED", district_id)) %>%
+  
+  # Fix non-conforming district_id labels by extracting the district number
+  # and preserving it as a two character string padded with leading zeros.
+  # These labels reference full term races in the presence of unexpired
+  # term races, which we just eliminated.
+  
+  mutate (district_id = str_pad(str_extract(district_id, "[:digit:]{1,2}"),
+                                2, 
+                                pad="0")) %>%
+
+  # There are a few races where no votes were recorded because a candidate
+  # ran unopposed, so rather than drop rows without votes recorded, we
+  # keep any row for a winner including those who did not receive votes as well
+  # as any row where a candidate received votes in the general election.
+
+  filter (won | !is.na(general_votes)) %>%
+  
+  # There are six non-voting members: a delegate representing the 
+  # District of Columbia, a resident commissioner representing Puerto Rico, 
+  # as well as one delegate for each of the other four permanently inhabited 
+  # U.S. territories: American Samoa, Guam, the Northern Mariana Islands and 
+  # the U.S. Virgin Islands.  We create a new indicator for those races.
+  
+  mutate (non_voting = state %in% c("AS", "DC", "GU", "MP", "PR", "VI"),
+          .after = "district_id") %>%
+
+  # Peter King, candidate H2NY03089 was the incumbent in the 2nd district of NY.
+  # He also won the general election for that seat.  A few rows in the dataset 
+  # indicate that he was not the incumbet and that he lost.  We correct that.
+  # The correction is needed for the next transformation to work correctly.
+  
+  mutate (incumbent = ifelse (cand_id == "H2NY03089", TRUE, incumbent)) %>%
+  mutate (won = ifelse (cand_id == "H2NY03089", TRUE, won)) %>%
+  
+  # Some states allow candidates to appear on multiple party lines, separate 
+  # vote totals are indicated for each party.  Therefore, for analysis that 
+  # involves candidate totals, it is necessary to aggregate across all party 
+  # lines within a district.  For analysis that focuses on two-party vote 
+  # totals, it is necessary to account for major party candidates who receive 
+  # votes under multiple party labels.
+  
+  group_by (state, district_id, non_voting, cand_id, incumbent, won) %>%
+  summarise(general_votes=sum(general_votes), 
+            general_percent=sum(general_percent),
+            votes_cast=general_votes/general_percent,
+            party.labels = paste(unique(party), collapse=", "),
+            .groups = "keep")
+
+# Now that the results dataset has been cleaned up, let's count the number of
+# candidates.  This is useful in case we want to analyze uncontested elections.
+
+candidate_counts <- results_house.refined %>% 
+  group_by(state, district_id) %>%
+  summarise(candidate_count = length(unique(cand_id)),
+            .groups = "keep")
+
+results_house.refined <- inner_join(results_house.refined, candidate_counts,
+                                    by = c("state", "district_id"))
+
+df <- inner_join(campaigns, results_house.refined, by="cand_id") %>%
+  select (state, district_id, candidate_count,non_voting, 
+          cand_id, cand_name, pty_cd, incumbent, won, 
+          general_votes, general_percent, votes_cast, ttl_disb)
+```
+
+## Revisiting that Histogram Again
+
+```{r revisited-histogram-again, fig.cap="Revised Voting Percentages Again", fig.width=10, fig.height=3, echo=FALSE}
+vote_plot_3 <- df %>% filter (candidate_count > 1) %>%
+  ggplot() +
+  aes (x = general_percent) +
+  geom_histogram (color = "black", fill = "white", bins = 100, na.rm = TRUE) +
+  scale_x_continuous(labels = scales::percent) + 
+  labs (title = "2016 House of Representatives general election results", 
+        subtitle = paste ("mean = ", 
+                          round(mean(df.deduped$general_percent, na.rm = TRUE), 3)),
+        x = "percent of vote",
+        y = "candidates")
+vote_plot_3
+```
+
+
+
 
 # What About Homework 10?
 
