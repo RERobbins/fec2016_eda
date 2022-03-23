@@ -24,20 +24,19 @@ theme_set(theme_minimal())
 ```
 # Introduction
 
-The w203 Unit 10 homework assignment revolves around some of the Federal Election Commission 2016 datasets available in the `fec16`  R package.  As I worked through that assignment I noticed several anomalies.  In the wake of the assignment I decided to go back and take a much closer look at the data.  This document summarizes what I found.  This is a work in progress.  I have identified what I believe to be the most meaningful issue in the data, however, as noted in Section 4.5, there are still issues to review.
+The w203 Unit 10 homework assignment revolves around some of the Federal Election Commission 2016 datasets available in the `fec16`  R package.  As I worked through that assignment I noticed several anomalies.  In the wake of the assignment I decided to go back and take a much closer look at the data.  This document summarizes what I found.  This is a work in progress.  I have identified what I believe to be the most meaningful issues in the data.
 
 # Setup
 
-This review looks primarily at two of the `fec16` datasets, `campaigns` and `results_house`.  The working dataset for this exercise, `df`, is formed by an inner join of `campaigns` and `results_house`, after which candidates for whom votes were not recorded are removed.  The working dataset is limited to columns of interest.  The `candidates` dataset from the `fec2016` collection is also touched upon briefly in Section 3.3.
+This review looks at two of the `fec16` datasets, `campaigns` and `results_house`.  The working datasets for this exercise, `df.reference` and `df.refined` are derived  from `campaigns` and `results_house`.  The `df.reference` dataset is formed by an inner join of `campaigns` and `results_house`, after which candidates for whom votes were not recorded are removed.  The derivation of `df.refined` is described in detail below.  The working datasets are limited to columns of interest.
 
 ```{r load data}
 campaigns <- fec16::campaigns
-candidates <- fec16::candidates
 results_house <- fec16::results_house
 ```
 
 ```{r build working dataframe}
-df <- inner_join(campaigns, results_house) %>% 
+df.reference <- inner_join(campaigns, results_house, by="cand_id") %>% 
   drop_na(general_votes) %>%
   select (cand_id, cand_name, pty_cd, cand_pty_affiliation, party, incumbent, 
           ttl_disb, general_votes, general_percent, won, state, district_id)
@@ -50,18 +49,18 @@ df <- inner_join(campaigns, results_house) %>%
 Figure \@ref(fig:preliminary-histogram) is a histogram of the general election voting percentages for candidates receiving votes as reflected in the `results_house` dataset.  I was surprised to see the asymmetric mass on the left hand side of the histogram.  I thought that perhaps seeing a larger group of candidates receiving low percentages might have reflected a third or fourth candidate in a contest between two other more dominant candidates.  But I struggled to come up with a satisfactory explanation nonetheless.
 
 ```{r preliminary-histogram, fig.cap="Voting Percentages", fig.width=10, fig.height=3, echo=FALSE}
-vote_plot <- df %>%
+vote_plot_1 <- df.reference %>%
   ggplot() +
   aes (x = general_percent) +
   geom_histogram (color = "black", fill = "white", bins = 100, na.rm = TRUE) +
   scale_x_continuous(labels = scales::percent) + 
   labs (title = "2016 House of Representatives general election results", 
         subtitle = paste ("mean = ", 
-                          round(mean(df$general_percent, na.rm = TRUE), 3)),
+                          round(mean(df.reference$general_percent, na.rm = TRUE), 3)),
         x = "percent of vote",
         y = "candidates")
 
-vote_plot
+vote_plot_1
 ```
 
 ## Party Affiliation
@@ -96,17 +95,17 @@ Which yields:
 ```{r, echo=FALSE}
 `%!in%` = Negate(`%in%`)
 
-col.rep <- c(nrow(df %>% filter(party=="REP")),
-             nrow(df %>% filter(cand_pty_affiliation=="REP")),
-             nrow(df %>% filter(pty_cd==2)))
+col.rep <- c(nrow(df.reference %>% filter(party=="REP")),
+             nrow(df.reference %>% filter(cand_pty_affiliation=="REP")),
+             nrow(df.reference %>% filter(pty_cd==2)))
 
-col.dem <- c(nrow(df %>% filter(party=="DEM")),
-             nrow(df %>% filter(cand_pty_affiliation=="DEM")),
-             nrow(df %>% filter(pty_cd==1)))
+col.dem <- c(nrow(df.reference %>% filter(party=="DEM")),
+             nrow(df.reference %>% filter(cand_pty_affiliation=="DEM")),
+             nrow(df.reference %>% filter(pty_cd==1)))
 
-col.oth <- c(nrow(df %>% filter(party %!in% c("DEM", "REP"))),
-             nrow(df %>% filter(cand_pty_affiliation %!in% c("DEM", "REP"))),
-             nrow(df %>% filter(pty_cd > 2)))
+col.oth <- c(nrow(df.reference %>% filter(party %!in% c("DEM", "REP"))),
+             nrow(df.reference %>% filter(cand_pty_affiliation %!in% c("DEM", "REP"))),
+             nrow(df.reference %>% filter(pty_cd > 2)))
 
 data.frame(Republicans = col.rep, 
            Democrats = col.dem, 
@@ -114,45 +113,38 @@ data.frame(Republicans = col.rep,
            row.names = c("party", "cand_pty_affiliation", "pty_cd"))
 ```
 
-Using `party` yields `r nrow(df %>% filter(party %!in% c("DEM", "REP"))) - nrow(df %>% filter(cand_pty_affiliation %!in% c("DEM", "REP")))` more "other party" candidates than the alternatives.  The `cand_pty_affiliation` and `pty_cd` fields, as mapped, are equivalent for our purposes.
+Using `party` yields `r nrow(df.reference %>% filter(party %!in% c("DEM", "REP"))) - nrow(df.reference %>% filter(cand_pty_affiliation %!in% c("DEM", "REP")))` more "other party" candidates than the alternatives.  The `cand_pty_affiliation` and `pty_cd` fields, as mapped, are equivalent for our purposes.
 
 Let's review the winners (using `results_house$won`):
 
 ```{r party affiliation of winners, echo=FALSE}
 
-col.rep <- c(nrow(df %>% filter(won & party=="REP")),
-             nrow(df %>% filter(won & cand_pty_affiliation=="REP")),
-             nrow(df %>% filter(won & pty_cd==2)))
+col.rep <- c(nrow(df.reference %>% filter(won & party=="REP")),
+             nrow(df.reference %>% filter(won & cand_pty_affiliation=="REP")),
+             nrow(df.reference %>% filter(won & pty_cd==2)))
 
-col.dem <- c(nrow(df %>% filter(won & party=="DEM")),
-             nrow(df %>% filter(won & cand_pty_affiliation=="DEM")),
-             nrow(df %>% filter(won & pty_cd==1)))
+col.dem <- c(nrow(df.reference %>% filter(won & party=="DEM")),
+             nrow(df.reference %>% filter(won & cand_pty_affiliation=="DEM")),
+             nrow(df.reference %>% filter(won & pty_cd==1)))
 
-col.oth <- c(nrow(df %>% filter(won & party %!in% c("DEM", "REP"))),
-             nrow(df %>% filter(won & cand_pty_affiliation %!in% c("DEM", "REP"))),
-             nrow(df %>% filter(won & pty_cd > 2)))
+col.oth <- c(nrow(df.reference %>% filter(won & party %!in% c("DEM", "REP"))),
+             nrow(df.reference %>% filter(won & cand_pty_affiliation %!in% c("DEM", "REP"))),
+             nrow(df.reference %>% filter(won & pty_cd > 2)))
 
 data.frame(Republicans = col.rep, 
            Democrats = col.dem, 
            Other = col.oth, 
            row.names = c("party", "cand_pty_affiliation", "pty_cd"))
 ```
-The numbers are troubling.  The dataset indicates that `r nrow(df %>% filter(won))` people were elected to the House of Representatives in the 2016 election.  However, the number of voting representatives in the House of Representatives is fixed by law at no more than 435.  Moreover, after the 2016 general election, all of the voting members of the House of Representatives were either Republicans or Democrats.
+The numbers are troubling.  The dataset indicates that `r nrow(df.reference %>% filter(won))` people were elected to the House of Representatives in the 2016 election.  However, the number of voting representatives in the House of Representatives is fixed by law at no more than 435.  Moreover, after the 2016 general election, all of the voting members of the House of Representatives were either Republicans or Democrats.  There are also six non-voting members: a delegate representing the District of Columbia, a resident commissioner representing Puerto Rico, as well as one delegate for each of the other four permanently inhabited U.S. territories: American Samoa, Guam, the Northern Mariana Islands and the U.S. Virgin Islands.  The were, in fact, 441 people elected to the House of Representatives in the election.
 
 ## Multiple Observations For Some Candidates
 
 While working with the data, I found instances of candidate IDs appearing more than once in `results_house` and, to a lesser degree, candidate names appearing more than once in  `campaigns`.
 
-To explore this, I wrote a pair of functions, one to count the number of times any candidate id (`cand_id`) appears more than once in a dataset, and another to count the number of times a candidate's name (`cand_name`) appears more than once in a dataset.
+To explore this, a function to count the number of times any candidate id (`cand_id`) appears more than once in a dataset.
 
 ```{r helper functions, echo=TRUE}
-
-redundant.names <- function (dataset){
-  if ("cand_name" %in% colnames (dataset))
-    {dataset %>% group_by (cand_name) %>% count() %>% filter (n>1)}
-  else {NA}
-}
-
 redundant.ids <- function (dataset){
   if ("cand_id" %in% colnames (dataset))
     {dataset %>% group_by (cand_id) %>% count() %>% filter (n>1)}
@@ -160,29 +152,24 @@ redundant.ids <- function (dataset){
 }
 ```
 
-The table below shows the degree to which the various datasets include more than one observation for a single candidate id or name.
+The table below shows the degree to which the various datasets include more than one observation for a single candidate id.
 
 ```{r summarize redundancies, echo=FALSE}
   
 data.frame(
-    dataset = c("campaigns", "candidates", "results_house", "df"),
-    "redundant.names" = c(NROW(redundant.names(campaigns)),
-                    NROW(redundant.names(candidates)),
-                    NA,
-                    NROW(redundant.names(df))),
+    dataset = c("campaigns", "results_house", "df.reference"),
     "redundant.ids" = c(NROW(redundant.ids(campaigns)),
-                  NROW(redundant.ids(candidates)),
                   NROW(redundant.ids(results_house)),
-                  NROW(redundant.ids(df))))
+                  NROW(redundant.ids(df.reference))))
 ```
 
 Lets take a look at the data for a few candidates appearing more than once the working dataset.
 
 ```{r gather rows with redundant candidate ids, echo=FALSE}
-head(df %>%
-       filter (cand_id %in% redundant.ids(df)$cand_id) %>%
-       select(cand_id, cand_name, pty_cd, party, 
-              ttl_disb, general_votes, general_percent) %>%
+head(df.reference %>%
+       filter (cand_id %in% redundant.ids(df.reference)$cand_id) %>%
+       select (cand_id, cand_name, pty_cd, party, 
+               ttl_disb, general_votes, general_percent) %>%
        arrange (cand_id)
     , 10)
 ```
@@ -196,14 +183,13 @@ Upon review of generally available election returns, for the candidates listed a
 
 ## The Approach
 
-Based on the foregoing, it seems reasonable to group the candidates by ID, name, party affiliation (using `pty_cd`) and, to be prudent, other indicator fields, such as campaign spend whether they were an incumbent and whether they won.  Then we can derive the vote and percentage of votes for each group by taking the sum of those field for each row in the group.
+I have come to learn that some states allow candidates to appear on multiple party lines, and that some reports separate vote totals for each party.  Therefore, for analysis that involves candidate totals, it is necessary to aggregate across all party lines within a district.  For analysis that focuses on two-party vote totals, it is necessary to account for major party candidates who receive votes under multiple party labels.  This is a topic discussed in this [codebook](https://dataverse.harvard.edu/file.xhtml?fileId=4786923&version=10.0) maintained by the MIT Election Data Science Lab.
 
-In most cases where there are no duplicate entries, this step will result in the original row for the candidate being preserved.  But for candidates with multiple entries based on the candidate ID field, this step will collapse those rows into a single row with the correct number of votes and percent of votes received.
 
 The refined date frame can be derived from the original as follows:
 
 ```{r dedupe df, message=FALSE}
-df.deduped <- df %>%
+df.refined <- df.reference %>%
   group_by(cand_id, cand_name, pty_cd, incumbent, won, ttl_disb, state) %>%
   summarise (general_votes = sum(general_votes),
              general_percent = sum(general_percent),
@@ -214,28 +200,25 @@ df.deduped <- df %>%
 
 Let's review what the dataset looks like after the mitigation step described above.
 
-```{r review the results}
+```{r review the results, echo=TRUE}
 
-(NROW(df))
-(NROW(df.deduped))
-(redundant.ids(df.deduped))
-(redundant.names(df.deduped))
+print(NROW(df.reference))
+print(NROW(df.refined))
+print(redundant.ids(df.refined))
 ```
 
-1. The number of observations has been reduced from `r NROW(df)` to `r NROW(df.deduped)`.
+1. The number of observations has been reduced from `r NROW(df.reference)` to `r NROW(df.refined)`.
 2. The number of redundant candidate IDs has been reduced to 1.
-3. The number of redundant candidate names has been reduced to 1.
 
-The same candidate is reflected in the second and third items above.
+The breakdown by party (using `pty_cd`) is as follows:
 
-The breakdown by party is as follows:
 ```{r party review after dedupe, echo=FALSE} 
 
-col.rep <- c(nrow(df.deduped %>% filter(pty_cd==2)))
+col.rep <- c(nrow(df.refined %>% filter(pty_cd==2)))
 
-col.dem <- c(nrow(df.deduped %>% filter(pty_cd==1)))
+col.dem <- c(nrow(df.refined %>% filter(pty_cd==1)))
 
-col.oth <- c(nrow(df.deduped %>% filter(pty_cd > 2)))
+col.oth <- c(nrow(df.refined %>% filter(pty_cd > 2)))
 
 data.frame(Republicans = col.rep, 
            Democrats = col.dem, 
@@ -245,11 +228,11 @@ data.frame(Republicans = col.rep,
 And if we isolate on the winners:
 
 ```{r party review of winners after dedupe, echo=FALSE}
-col.rep <- c(nrow(df.deduped %>% filter(won & pty_cd==2)))
+col.rep <- c(nrow(df.refined %>% filter(won & pty_cd==2)))
 
-col.dem <- c(nrow(df.deduped %>% filter(won & pty_cd==1)))
+col.dem <- c(nrow(df.refined %>% filter(won & pty_cd==1)))
 
-col.oth <- c(nrow(df.deduped %>% filter(won & pty_cd > 2)))
+col.oth <- c(nrow(df.refined %>% filter(won & pty_cd > 2)))
 
 data.frame(Republicans = col.rep, 
            Democrats = col.dem, 
@@ -261,34 +244,33 @@ data.frame(Republicans = col.rep,
 
 The six candidates identified as winning but not affiliated with a major party are:
 ```{r unaffiliated winners, echo=FALSE}
-df.deduped %>% filter (won & pty_cd == 3)
+df.refined %>% filter (won & pty_cd == 3)
 ```
 - Betty McCollum and Richard Nolan are Democrats.  The dataset is incorrect.
 - Rodney David and Jason Smith are Republicans.  The dataset is incorrect.
 - Jennifer Gonzalez is neither a Republican nor a Democrat.  She represents Puerto Rico as a delegate.
 - Greogio Sablan is now a Republican.  In 2016 he was neither a Republican nor a Democrat.  He represents the Northern Mariana Islands as a delegate.
 
-Because Puerto Rico and the Northern Mariana Islands are territories of the United States, and not states, their representatives in the House of Representatives are delegates with limited voting privileges.  Delegates can currently vote in committee and in certain votes on the House floor, but not if their vote would be decisive. Delegates have a marginalized role in Congress and their constituents are not represented in Congress in the same manner as most citizens.
-
-So, while there are `r NROW(df.deduped %>% filter (won))` people identified as winners in the 2016 House of Representatives election, that include 2 delegates who are not considered voting members of the House.  Accordingly, the data is now consistent with the limit on voting members in the House (435) and every voting member has been accounted for as a Republican or Democrat.
+So, while there are `r NROW(df.refined %>% filter (won))` people identified as winners in the 2016 House of Representatives election, that includes 2 delegates who are not considered voting members of the House.  Accordingly, every voting member has been accounted for as a Republican or Democrat.  However, the total number of candidates elected was 441 consisting of 435 members with voting privileges plus six additional non-voting members, as described above.
 
 ## The Lone Duplicate Entry Remaining
 
 That leaves one person with duplicate entries in the dataset.  That distinction goes to Peter T. King.  His record was not merged because when we formed the grouping, to be conservative, we added several indicators from the dataset to prevent merging records that warranted further examination.  In this case, the dataset for Mr. King has one row indicating he is not an incumbent who lost and another indicating he is an incumbent who won.  In fact, Mr. King was an incumbent and he won re-election in 2016 with 181,506 votes.
+
 ```{r, echo=FALSE}
-df.deduped %>% filter (cand_id %in% redundant.ids(df.deduped)$cand_id)
+df.refined %>% filter (cand_id %in% redundant.ids(df.refined)$cand_id)
 ```
 ## Revisiting that Histogram
 
 ```{r revisited-histogram, fig.cap="Revised Voting Percentages", fig.width=10, fig.height=3, echo=FALSE}
-vote_plot_2 <- df.deduped %>%
+vote_plot_2 <- df.refined %>%
   ggplot() +
   aes (x = general_percent) +
   geom_histogram (color = "black", fill = "white", bins = 100, na.rm = TRUE) +
   scale_x_continuous(labels = scales::percent) + 
   labs (title = "2016 House of Representatives general election results", 
         subtitle = paste ("mean = ", 
-                          round(mean(df.deduped$general_percent, na.rm = TRUE), 3)),
+                          round(mean(df.refined$general_percent, na.rm = TRUE), 3)),
         x = "percent of vote",
         y = "candidates")
 
@@ -297,7 +279,7 @@ vote_plot_2
 
 Figure \@ref(fig:revisited-histogram) reproduces the histogram from Figure \@ref(fig:preliminary-histogram) using the refined dataset.  The asymmetric mass on the left hand side of the histogram is no longer present.  The histogram appears to be much more symmetric.  
 
-However, we now appear to have a few candidates receiving more than 100% of the vote in their races.  That suggests that there are cases where our mitigation approach is not warranted, *i.e.*, where the correct number of votes and percentages cannot be derived by adding the redundant observations.
+However, we now appear to have a few candidates receiving more than 100% of the vote in their races.  
 
 # Vote Totals, Write In Votes ansd Uncontested Elections
 
@@ -305,7 +287,7 @@ Figure \@ref(fig:revisited-histogram) suggests we should take a closer look at t
 
 ## Vote Totals
 
-We can derive the implied total number of votes cast from the number of votes received by a candidate and the percentage of votes received by that candidate, *i.e.,* $votes\_cast\ = \frac{general\_votes}{general\_percent}$.  We would expect that number to be the same when calcuilated across every observation for a particular race.
+We can derive the implied total number of votes cast from the number of votes received by a candidate and the percentage of votes received by that candidate, *i.e.,* $votes\_cast\ = \frac{general\_votes}{general\_percent}$.  We would expect that number to be the same when calculated across every observation for a particular race.
 
 First, let's see votes cast for some observations.
 
@@ -346,7 +328,7 @@ results_house %>%
   summarise(unique_votes_cast = length(unique(votes_cast)), .groups = "keep") %>%
   filter(unique_votes_cast > 1)
 ```
-We are down to just suspicious contests.  Let's take a closer look.
+We are down to just two suspicious contests.  Let's take a closer look.
 
 ```{r looking at the suspicious contests, include=TRUE}
 results_house %>%
@@ -368,13 +350,62 @@ results_house %>%
 ```
 So we have two rows missing the percentage of votes received by the candidate.
 
+## How Can A Candidate Exceed 100% Of The Vote
+
+Now that we have gone to the trouble of confirming that the `general_votes` and `general_percent` fields yield a consistent number for total votes cast in each district, how can we explain why some candidates vote percentages as shown in Figure \@ref(fig:revisited-histogram) exceed 100%.
+
+Here are the candidates from our deduped dataset with more than 100% of the vote.
+
+```{r percentages too high, echo=TRUE}
+df.refined %>% filter(general_percent > 1)
+```
+Let's go back and look at the original results data for each.
+
+```{r percentages too high detail, echo=TRUE}
+results_house %>% filter(cand_id %in% c("H2HI02110", "H6KY01110", "H6PA02171"))
+```
+
+Aha!  There's something unusual about these district identification labels.  After a little bit of additional research, I realized that in some states, when there is a vacancy created in advance of the normal expiration of a term of office, the election for the balance of the unexpired term is held separate and apart from the election for the next succeeding full term.  So, the `results_house` data is showing the "normal" full term election results with a "FULL TERM" district suffix and the unexpired term election results with the "UNEXPIRED TERM" district suffix.
+
+We will remove results for the unexpired term elections and normalize the "FULL TERM" labels.
+
+```{r disregard unexpired term elections and normalize district ids, echo=TRUE}
+
+df.refined <- df.reference %>%
+  filter (!grepl ("UNEXPIRED", district_id)) %>%
+  mutate (district_id = str_pad(str_extract(district_id, "[:digit:]{1,2}"),
+                                2, 
+                                pad="0")) %>%
+  group_by(cand_id, cand_name, pty_cd, incumbent, won, ttl_disb, state, district_id) %>%
+  summarise (general_votes = sum(general_votes),
+             general_percent = sum(general_percent),
+             .groups = "keep")
+```
+Now let's look at the voting percentage distribution histogram,
+
+```{r revisited-histogram-third-try, fig.cap="Revised Voting Percentages", fig.width=10, fig.height=3, echo=FALSE}
+vote_plot_3 <- df.refined %>%
+  ggplot() +
+  aes (x = general_percent) +
+  geom_histogram (color = "black", fill = "white", bins = 100, na.rm = TRUE) +
+  scale_x_continuous(labels = scales::percent) + 
+  labs (title = "2016 House of Representatives general election results", 
+        subtitle = paste ("mean = ", 
+                          round(mean(df.refined$general_percent, na.rm = TRUE), 3)),
+        x = "percent of vote",
+        y = "candidates")
+
+vote_plot_3
+```
+
+The voting percentage histrogram looks much better.  The pronounced density mass on the left attributable to slivers of splintered votes has been removed and the distortions due to merging the elections for full and unexpired terms has also been removed.
+
 ## Write In Votes
 
 Now that we have confirmed that the data for the candidates participating in a contest implies a consistent total number of votes cast in the election, let's compare the total number of votes accounted for in each contest with the number of votes cast that we have derived.  When the numbers match that means that there are no write in ballots included in the observations for that contest.  When the total votes recorded is less than the total vote cast number we expect for that election the deficit represents either missing candidates or write in ballots.  The total number of votes recorded should never exceed the votes cast number we recorded.
 
 ```{r calculate votes recorded per race, include=TRUE}
-vote_reconciliation <- results_house %>%
-  drop_na(general_votes) %>%
+vote_reconciliation <- df.refined %>%
   mutate (implied_votes_cast = round(general_votes/general_percent, 0)) %>%
   group_by(state, district_id) %>%
   summarise(implied_votes_cast = max(implied_votes_cast, na.rm=TRUE),
@@ -390,42 +421,13 @@ sum(between(vote_reconciliation$vote_deficit, 1001, 10000))
 sum(vote_reconciliation$vote_deficit > 10000)
 vote_reconciliation %>% filter (vote_deficit > 10000)
 ```
-  We have non-conforming district identification numbers in the dataset.  Let's take a look.
-  
-```{r}
-results_house %>% 
-  drop_na(general_votes) %>%
-  filter (!str_detect(district_id, "^[:digit:]+$")) %>%
-  group_by (state, district_id) %>%
-  summarise(count = n(), .groups="keep")
-```
 
-Since we have been grouping by state and district id numbers, we should fix these labels.
+More work to do .....
 
-```{r}
-vote_reconciliation <- results_house %>%
-  drop_na(general_votes) %>%
-  mutate (implied_votes_cast = round(general_votes/general_percent, 0)) %>%
-  mutate (district_id = str_pad(str_extract(district_id, "[:digit:]{1,2}"), 
-                                2, pad="0")) %>%
-  group_by(state, district_id) %>%
-  summarise(implied_votes_cast = max(implied_votes_cast, na.rm=TRUE),
-            votes_recorded = sum(general_votes),
-            vote_deficit = implied_votes_cast - votes_recorded,
-            .groups = "keep")
-
-sum(vote_reconciliation$vote_deficit == 0)
-sum(between(vote_reconciliation$vote_deficit, 1, 1000))
-sum(between(vote_reconciliation$vote_deficit, 1001, 10000))
-sum(vote_reconciliation$vote_deficit > 10000)
-vote_reconciliation %>% filter (vote_deficit > 10000)
-```
-
-Let's repeat out vote total integrity test.
+Let's repeat our vote total integrity test.
 
 ```{r look again for suspicious contests after rounding to the nearest integer, include=TRUE}
-results_house %>%
-  drop_na(general_votes) %>%
+df.refined %>%
   mutate (votes_cast = round(general_votes/general_percent, 0)) %>%
   group_by(state, district_id) %>%
   summarise(unique_votes_cast = length(unique(votes_cast)), .groups = "keep") %>%
@@ -435,8 +437,8 @@ No changes there.
 
 # Using the rebuilt dataframe
 
-```{r build working dataframe}
-results_house.refined <- results_house %>% 
+```{r build final dataframe}
+df.final <- results_house %>% 
 
   # The dataset includes full term races (the norm) and several races
   # for unexpired terms.  We eliminate the races for unexpired terms, as
@@ -494,15 +496,15 @@ results_house.refined <- results_house %>%
 # Now that the results dataset has been cleaned up, let's count the number of
 # candidates.  This is useful in case we want to analyze uncontested elections.
 
-candidate_counts <- results_house.refined %>% 
+candidate_counts <- df.final %>% 
   group_by(state, district_id) %>%
   summarise(candidate_count = length(unique(cand_id)),
             .groups = "keep")
 
-results_house.refined <- inner_join(results_house.refined, candidate_counts,
-                                    by = c("state", "district_id"))
+df.final <- inner_join(df.final, candidate_counts,
+                       by = c("state", "district_id"))
 
-df <- inner_join(campaigns, results_house.refined, by="cand_id") %>%
+df.final <- inner_join(campaigns, df.final, by="cand_id") %>%
   select (state, district_id, candidate_count,non_voting, 
           cand_id, cand_name, pty_cd, incumbent, won, 
           general_votes, general_percent, votes_cast, ttl_disb)
@@ -511,21 +513,18 @@ df <- inner_join(campaigns, results_house.refined, by="cand_id") %>%
 ## Revisiting that Histogram Again
 
 ```{r revisited-histogram-again, fig.cap="Revised Voting Percentages Again", fig.width=10, fig.height=3, echo=FALSE}
-vote_plot_3 <- df %>% filter (candidate_count > 1) %>%
+vote_plot_4 <- df.final %>% filter (candidate_count > 1) %>%
   ggplot() +
   aes (x = general_percent) +
   geom_histogram (color = "black", fill = "white", bins = 100, na.rm = TRUE) +
   scale_x_continuous(labels = scales::percent) + 
   labs (title = "2016 House of Representatives general election results", 
         subtitle = paste ("mean = ", 
-                          round(mean(df.deduped$general_percent, na.rm = TRUE), 3)),
+                          round(mean(df.final$general_percent, na.rm = TRUE), 3)),
         x = "percent of vote",
         y = "candidates")
-vote_plot_3
+vote_plot_4
 ```
-
-
-
 
 # What About Homework 10?
 
