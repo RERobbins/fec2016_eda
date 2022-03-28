@@ -1,0 +1,206 @@
+---
+title: "fec16 Exploratory Data Analysis"
+author: "Richard Robbins"
+date: \today
+header-includes: 
+    - \usepackage{float}
+    - \usepackage{dcolumn}
+output:
+  bookdown::pdf_document2:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::knit_hooks$set(inline=function(x) {prettyNum(x, big.mark=",")})
+```
+
+```{r install fec16 if necessary and load libraries, echo=FALSE, include=FALSE, message=FALSE}
+if (!require("fec16")) install.packages("fec16")
+if (!require("kableExtra")) install.packages("kableExtra")
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(fec16)
+theme_set(theme_minimal())
+```
+
+# Introduction
+
+The w203 Unit 10 homework assignment is based on Federal Election Commission 2016 data available in the `fec16`  R package.  As I worked on the assignment I noticed several things that piqued my curiosity.  As a result, after completing the assignment, I reviewed the data more closely.  This report describes my most meaningful findings.
+
+I focus only on select data elements from the `fec16::results_house` dataset that pertain to the general election, as opposed to primary or runoff elections.  I also consider data from the `fec16::campaigns` dataset, but only to a limited degree.
+
+The Federal Election Commission 2016 Federal Election report (the "Report") appears at https://www.fec.gov/resources/cms-content/documents/federalelections2016.pdf.  The Report includes explanatory notes (the "Explanatory Notes") that inform this analysis.  
+
+```{r load data, echo=TRUE}
+campaigns <- fec16::campaigns
+results_house <- fec16::results_house
+```
+
+# Splintered Vote Reporting and Party Affiliation
+
+## Splintered Vote Reporting
+
+In some cases, `results_house` includes several rows that collectively represent the votes received by a candidate in an election.  I refer to this phenomenon as "splintered vote reporting".  When the `results_house` dataset is used to analyze the total votes received by a candidate or to compare total votes received by individual candidates in a group, splintered vote reporting must be taken into account.  The FEC touches on this topic in the Explanatory Notes to the Report.
+
+>“Combined Parties” represents all the valid votes cast for one candidate, regardless of party. (This method is used where a candidate may be listed on the ballot more than once, with different party designations, i.e., in Connecticut, New York and South Carolina.) These votes are then broken down and listed by party. 
+
+In the simplest case, a candidate appears on the ballot once and the relevant data is reflected in a single row.  Consider, for example, Republican Doug LaMalfa. He won the election to represent California's 1st district.  He was elected with 185,448 votes and 59% of the vote.  Table \@ref(tab:CA-1) shows how his vote data is reflected in `results_house`.  On the other hand, where a candidate is listed on the ballot more than once, `results_house` includes one row for each party designated for the candidate on the ballot.  For example, consider Lee Zeldin, a Republican, who won the race to represent New York's 1st district.  He was elected  with 188,499 votes and 58% of the vote.  Table \@ref(tab:NY-1) shows how his vote data is reflected in `results_house`
+
+The `results_house` dataset includes `r nrow(results_house %>% drop_na(general_votes))` rows with candidate vote data.  If we take splintered vote reporting into account and ignore the effect of unexpired term elections (discussed below), we have `r nrow(results_house %>% drop_na(general_votes) %>% count (cand_id))` rows.  The difference of `r nrow(results_house %>% drop_na(general_votes)) - nrow(results_house %>% drop_na(general_votes) %>% count (cand_id))` rows represents splintered vote reporting.
+
+If we count the number of winning candidates in `results_house` without considering splintered vote reporting, we get `r nrow(results_house %>% drop_na(general_votes) %>% filter(won))` which is clearly wrong as the House of Representatives in 2016 (and now) how 435 members plus six additional non-voting members.  Again, the difference between the numbers results from splintered vote reporting.
+
+```{r CA-1}
+kable(results_house %>% filter(state=="CA" & district_id=="01" & won) %>% select(cand_id, party, general_votes, general_percent),
+      col.names= c("candidate", "party", "votes", "percent"),
+      caption = "California 1st District Winner",
+      digits = 2,
+      format.args = list(big.mark = ","))
+```
+
+```{r NY-1}
+kable(results_house %>% filter(state=="NY" & district_id=="01" & won) %>% select(cand_id, party, general_votes, general_percent),
+      col.names = c("candidate", "party", "votes", "percent"),
+      caption = "New York 1st District Winner",
+      digits = 2,
+      format.args = list(big.mark = ","))
+``` 
+
+## Party Affiliation
+
+As described above, a single candidate can appear in voting reports with multiple party affiliations.  The `results_house` data reflects `r length(unique(results_house$party))` separate parties.  If we focus only on candidates participating in the general election, we get `r length(unique(drop_na(results_house, general_votes)$party))` parties.  Finally, if we look only at the winners, we get `r length(unique(filter(results_house, won)$party))` parties.  
+
+The 435 voting members of the 2016 House of Representatives consisted of 241 Republicans and 194 Democrats.  The six non-voting delegates included three Democrats (District of Columbia, Guam and the United States Virgin Islands), one Republican (American Samoa), one Independent (Northern Mariana Islands) and one member of the New Progressive Party (Puerto Rico).  See, the Report.  Party data in `results_house` reflects candidates being listed under multiple parties in a ballot but is not a true indicator of party affiliation.  
+
+When a party places a candidate on the ballot it does not necessarily mean that the candidate belongs to that party. It means that the party endorses that candidate for the election.  So, when the Party for Precise Coffee Roasters (the "PPCR") endorses Alex and places his name on the ballot to be elected as the representative from California's 13th district, it does not mean that Alex belongs to the PPCR.  In fact, his principal party affiliation is with Statisticians for Responsible Bean Roasting (the "SRBR").
+
+The difficulty is that the `results_house` dataset does not make it easy to identify with certainty the principal party affiliation of the candidates.  Other `fec16` datasets are well suited to this purpose.  The `campaigns` dataset does not contain duplicate entries for candidates and it includes two relevant variables, `cand_pty_affiliation` and `pty_cd`.
+
+The `campaigns` dataset includes `r nrow(campaigns)` candidates and no duplicate candidate identification numbers.  The `cand_pty_affiliation` variable includes `r nrow(campaigns %>% filter (cand_pty_affiliation == "REP"))` Republicans, `r nrow(campaigns %>% filter (cand_pty_affiliation == "DEM"))` Democrats and `r nrow(campaigns %>% filter (cand_pty_affiliation != "REP" & cand_pty_affiliation != "DEM"))` people who are neither Republicans nor Democrats. The `pty_cd` numeric variable is consistent with `cand_pty_affiliation`, where 1 denotes a Democrat, 2 a Republican, and 3 people who are neither Republicans or Democrats.
+
+## Correcting For Splintered Vote Reporting and Identifying Principal Party Affiliation
+
+We can address the splintered vote reporting problem by grouping `results_house` information by candidate identification ID and deriving the total general election votes and the total general election percentages from the rows in the group.  We can take the resulting dataset and add party affiliation by joining the `campaigns` dataset on the `cand_id` variable and utilizing either `cand_ptuy_affiliation` or `pty_cd`.  In the following example, we remove rows that do not contain general election voting information and retain other variables of interest, including `state`, `district_id`, `incumbent` and `won`.
+
+```{r refined-results-data-version-1, echo=TRUE}
+df <- results_house %>%
+  drop_na(general_votes) %>%
+  group_by(cand_id, state, district_id, incumbent, won) %>%
+  summarize(total_general_vote = sum(general_votes),
+            total_general_percent = sum(general_percent),
+            .groups = "keep") %>%
+  ungroup()
+
+df <- inner_join(df, campaigns %>% select (cand_id, pty_cd), by="cand_id")
+
+df <- df %>%
+  mutate(party = case_when(pty_cd == 1 ~ "Democrat",
+                           pty_cd == 2 ~ "Republican",
+                           pty_cd == 3 ~ "Other"))
+```
+
+Table \@ref(tab:results-cross-check) compares the breakdown of winning candidates and their party affiliations as reflected in the data frame assembled with the immediately preceding code with the true results.  The numbers are getting close but it appears that there are still some flaws.  We explore those in greater detail below.
+
+```{r results-cross-check, echo=FALSE}
+
+df.republican.win <- nrow(df %>% filter(won & party=="Republican"))
+df.democrat.win <- nrow(df %>% filter(won & party=="Democrat"))
+df.other.win <- nrow(df %>% filter(won & party=="Other"))
+df.count.win <- nrow(df %>% filter(won))
+
+correct.republican.win <- 242
+correct.democrat.win <- 197
+correct.other.win <- 2
+correct.count.win <- 441
+
+col.rows <- c("Republican", "Democrat", "Other", "Total")
+table.derived <- c(df.republican.win, df.democrat.win, df.other.win, df.count.win)
+table.true <- c(242, 197, 2, 441)
+
+kable(data.frame(col.rows, table.derived, table.true),
+      col.names = c("party", "derived", "true"),
+      caption = "Party Results Cross Check")
+```
+
+## Voting Percentage Distributions
+
+Before we fine tune our work, let's take a step back and consider the impact of properly accounting for splintered vote recording.  When a candidates vote total is splintered, we end up with too many data points and the nunber of votes and voting percentage with each is too low.  The primary implication of this is that we would expect to see an incorrect concentration of lower percentage votes in a distribution of voting percentages and a corresponding aggregate descrease in voting percentages that should be reflected at higher levels.  This shift should also be reflected in the mean. 
+
+The pair of histograms in Figure \@ref(fig:histogram-panel-1) demonstrates the anticipated effects.  The upper histogram in the panel shows the distribution of voting percentages without correction for splintered voting.  The bottom histogram in the panel shows the distribution of voting percentages after the correction for splintered voting.  The most prominent feature of the upper histogram is a pronounced density mass on the left hand side that grows as the percentages on the x axis drop.  After the correction is applied, the pronounced mass is dramatically diminished and the acceleration as voting percentages drop is disippated.  The mean of the percentages reflected in the upper histogram is .342 whereas the mean of the percentages increases to .509 after the correction is applied.
+
+```{r histogram-panel-1, fig.cap="Voting Percentage Distribution"}
+
+percentage_chart_1 <- results_house %>%
+  ggplot() +
+  aes (x = general_percent) +
+  geom_histogram (color = "black", fill = "white", bins = 100, na.rm = TRUE) +
+  scale_x_continuous(labels = scales::percent) + 
+  labs (title = "2016 House of Representatives general election results", 
+        subtitle = paste ("mean = ", 
+                          round(mean(results_house$general_percent, na.rm = TRUE), 3)),
+        x = "percent of vote with splintered vote reporting",
+        y = "candidates") +
+  coord_cartesian(ylim = c(0, 85))
+
+percentage_chart_2 <- df %>%
+  ggplot() +
+  aes (x = total_general_percent) +
+  geom_histogram (color = "black", fill = "white", bins = 100, na.rm = TRUE) +
+  scale_x_continuous(labels = scales::percent) + 
+  labs (title = "",
+        subtitle = paste ("mean = ", 
+                          round(mean(df$total_general_percent, na.rm = TRUE), 3)),
+        x = "percent of vote after splintered vote reporting correction",
+        y = "candidates") +
+    coord_cartesian(ylim = c(0, 85))
+
+percentage_chart_1 / percentage_chart_2
+```
+
+# Elections for Unexpired Terms
+
+In the ordinary course, an election to the House of Representatives is for a full term that commences when the term of the incumbent seat holder expires.  However, frome time to time a vacancy occurs before the expiration of the incumbent's term.  Some states have separate elections for unexpired terms.  In some cases, results for unexpired term elections are commingled in the `results_house` data together with full term elections.  The FEC references this in the first paragraph of the body of the Report (with emphasis added):
+
+> This publication has been prepared by the Federal Election Commission to provide the public with
+the results of elections held in the fifty states during 2016 for the offices of United States President,
+United States Senator and United States Representative. Also included are the results for Delegate
+to Congress from American Samoa, the District of Columbia, Guam, the Northern Mariana Islands,
+the U.S. Virgin Islands and Resident Commissioner for Puerto Rico. **Additionally, there are results
+for the special elections to fill the unexpired terms in Hawaii’s 1st Congressional District,
+Kentucky’s 1st Congressional District and Pennsylvania’s 2nd Congressional District.** The
+Commission undertakes this project on a biennial basis in order to respond to public inquiries.
+
+Table \@ref(tab:unexpired-terms) lists the unexpired term races in `results_house` together with the number of observations for each.  Note that there are inconsistent references to the contest relating to the unexpired term for the 1st District of Kentucky.  For flexibility, I will add a new variable to the dataframe to indicate whether a row in the dataset pertains to an election for an unexpired term.
+
+```{r unexpired-terms}
+kable(results_house %>% 
+  filter(str_detect(district_id, 'UNEXPIRED')) %>% 
+  group_by(state, district_id) %>%
+  summarize (count = n(), .groups = "keep"),
+  caption = "Unexpired Term Contests")
+
+df <- df %>%
+  mutate (unexpired_term = str_detect(district_id, "UNEXPIRED"))
+```
+# Uncontested Elections
+
+When analyzing voting contests, it may be useful to know when a candidate ran unopposed.
+
+```{r uncontested-elections}
+
+candidate_counts <- df %>% 
+  group_by(state, district_id) %>%
+  summarise(candidate_count = length(unique(cand_id)),
+            .groups = "keep")
+
+
+```
+
+# Non-Voting Delegates
+
+# Write In Ballots
+
+# Small Defects
