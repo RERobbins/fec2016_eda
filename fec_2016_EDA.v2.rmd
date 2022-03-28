@@ -43,13 +43,13 @@ results_house <- fec16::results_house
 
 ## Splintered Vote Reporting
 
-In some cases, `results_house` includes several rows that collectively represent the votes received by a candidate in an election.  I refer to this phenomenon as "splintered vote reporting".  When `results_house` dataset is used to analyze the total votes received by a candidate or to compare total votes received by individual candidates in a group , splintered vote reporting must be taken into account.  The FEC touches on this topic in the Explanatory Notes to the Report.
+In some cases, `results_house` includes several rows that collectively represent the votes received by a candidate in an election.  I refer to this phenomenon as "splintered vote reporting".  When the `results_house` dataset is used to analyze the total votes received by a candidate or to compare total votes received by individual candidates in a group, splintered vote reporting must be taken into account.  The FEC touches on this topic in the Explanatory Notes to the Report.
 
 >“Combined Parties” represents all the valid votes cast for one candidate, regardless of party. (This method is used where a candidate may be listed on the ballot more than once, with different party designations, i.e., in Connecticut, New York and South Carolina.) These votes are then broken down and listed by party. 
 
-In the simplest case, a candidate appears on the ballot once and the relevant data is reflected in a single row.  Consider, for example, Republican Doug LaMalfa. He won the election to represent California's 1st district.  He was elected with 185,448 votes and 59% of the vote.  Table \@ref(tab:CA-1) shows how his vote data is reflected in `results_house`.  On the other hand, where a candidate is listed on the ballot more than once, `results_house` includes one row for each party designated for the candidate.  For example, consider Lee Zeldin, a Republican, who won the race to represent New York's 1st district.  He was elected  with 188,499 votes and 58% of the vote.  Table \@ref(tab:NY-1) shows how his vote data is reflected in `results_house`
+In the simplest case, a candidate appears on the ballot once and the relevant data is reflected in a single row.  Consider, for example, Republican Doug LaMalfa. He won the election to represent California's 1st district.  He was elected with 185,448 votes and 59% of the vote.  Table \@ref(tab:CA-1) shows how his vote data is reflected in `results_house`.  On the other hand, where a candidate is listed on the ballot more than once, `results_house` includes one row for each party designated for the candidate on the ballot.  For example, consider Lee Zeldin, a Republican, who won the race to represent New York's 1st district.  He was elected  with 188,499 votes and 58% of the vote.  Table \@ref(tab:NY-1) shows how his vote data is reflected in `results_house`
 
-The `results_house` dataset includes `r nrow(results_house %>% drop_na(general_votes))` rows with candidate vote data.  If we take splintered vote reporting into account and ignore the effect of unexpired term elections (discussed below), we have  `r nrow(results_house %>% drop_na(general_votes) %>% count (cand_id))` rows.  The difference of `r nrow(results_house %>% drop_na(general_votes)) - nrow(results_house %>% drop_na(general_votes) %>% count (cand_id))` rows represents splintered vote reporting.
+The `results_house` dataset includes `r nrow(results_house %>% drop_na(general_votes))` rows with candidate vote data.  If we take splintered vote reporting into account and ignore the effect of unexpired term elections (discussed below), we have `r nrow(results_house %>% drop_na(general_votes) %>% count (cand_id))` rows.  The difference of `r nrow(results_house %>% drop_na(general_votes)) - nrow(results_house %>% drop_na(general_votes) %>% count (cand_id))` rows represents splintered vote reporting.
 
 If we count the number of winning candidates in `results_house` without considering splintered vote reporting, we get `r nrow(results_house %>% drop_na(general_votes) %>% filter(won))` which is clearly wrong as the House of Representatives in 2016 (and now) how 435 members plus six additional non-voting members.  Again, the difference between the numbers results from splintered vote reporting.
 
@@ -75,11 +75,9 @@ As described above, a single candidate can appear in voting reports with multipl
 
 The 435 voting members of the 2016 House of Representatives consisted of 241 Republicans and 194 Democrats.  The six non-voting delegates included three Democrats (District of Columbia, Guam and the United States Virgin Islands), one Republican (American Samoa), one Independent (Northern Mariana Islands) and one member of the New Progressive Party (Puerto Rico).  See, the Report.  Party data in `results_house` reflects candidates being listed under multiple parties in a ballot but is not a true indicator of party affiliation.  
 
-When a party places a candidate on the ballot it does not necessarily mean that the candidate belongs to that party, it means that the party endorses that candidate for the election.  So, when the Party for Precise Coffee Roasters (the "PPCR") endorses Alex and places his name on the ballot to be elected as the representative from California's 13th district, it does not mean that Alex belongs to the PPCR.  In fact, his principal party affiliation is with Statisticians for Responsible Bean Roasting (the "SRBR").
+When a party places a candidate on the ballot it does not necessarily mean that the candidate belongs to that party. It means that the party endorses that candidate for the election.  So, when the Party for Precise Coffee Roasters (the "PPCR") endorses Alex and places his name on the ballot to be elected as the representative from California's 13th district, it does not mean that Alex belongs to the PPCR.  In fact, his principal party affiliation is with Statisticians for Responsible Bean Roasting (the "SRBR").
 
 The difficulty is that the `results_house` dataset does not make it easy to identify with certainty the principal party affiliation of the candidates.  Other `fec16` datasets are well suited to this purpose.  The `campaigns` dataset does not contain duplicate entries for candidates and it includes two relevant variables, `cand_pty_affiliation` and `pty_cd`.
-
-**[left off here]**
 
 The `campaigns` dataset includes `r nrow(campaigns)` candidates and no duplicate candidate identification numbers.  The `cand_pty_affiliation` variable includes `r nrow(campaigns %>% filter (cand_pty_affiliation == "REP"))` Republicans, `r nrow(campaigns %>% filter (cand_pty_affiliation == "DEM"))` Democrats and `r nrow(campaigns %>% filter (cand_pty_affiliation != "REP" & cand_pty_affiliation != "DEM"))` people who are neither Republicans nor Democrats. The `pty_cd` numeric variable is consistent with `cand_pty_affiliation`, where 1 denotes a Democrat, 2 a Republican, and 3 people who are neither Republicans or Democrats.
 
@@ -183,8 +181,23 @@ kable(results_house %>%
   group_by(state, district_id) %>%
   summarize (count = n(), .groups = "keep"),
   caption = "Unexpired Term Contests")
+
+df <- df %>%
+  mutate (unexpired_term = str_detect(district_id, "UNEXPIRED"))
 ```
 # Uncontested Elections
+
+When analyzing voting contests, it may be useful to know when a candidate ran unopposed.
+
+```{r uncontested-elections}
+
+candidate_counts <- df %>% 
+  group_by(state, district_id) %>%
+  summarise(candidate_count = length(unique(cand_id)),
+            .groups = "keep")
+
+
+```
 
 # Non-Voting Delegates
 
