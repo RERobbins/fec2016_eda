@@ -127,9 +127,9 @@ kable(data.frame(col.rows, table.derived, table.true),
 
 ## Voting Percentage Distributions
 
-Before we fine tune our work, let's take a step back and consider the impact of properly accounting for splintered vote recording.  When a candidates vote total is splintered, we end up with too many data points and the nunber of votes and voting percentage with each is too low.  The primary implication of this is that we would expect to see an incorrect concentration of lower percentage votes in a distribution of voting percentages and a corresponding aggregate descrease in voting percentages that should be reflected at higher levels.  This shift should also be reflected in the mean. 
+Before we fine tune our work, let's take a step back and consider the impact of properly accounting for splintered vote recording.  When a candidate's vote total is splintered, we end up with too many data points and the number of votes and voting percentage with each is too low.  The primary implication of this is that we would expect to see an incorrect concentration of lower percentage votes in a distribution of voting percentages and a corresponding aggregate decrease in voting percentages that should be reflected at higher levels.  This shift should also be reflected in the mean. 
 
-The pair of histograms in Figure \@ref(fig:histogram-panel-1) demonstrates the anticipated effects.  The upper histogram in the panel shows the distribution of voting percentages without correction for splintered voting.  The bottom histogram in the panel shows the distribution of voting percentages after the correction for splintered voting.  The most prominent feature of the upper histogram is a pronounced density mass on the left hand side that grows as the percentages on the x axis drop.  After the correction is applied, the pronounced mass is dramatically diminished and the acceleration as voting percentages drop is disippated.  The mean of the percentages reflected in the upper histogram is .342 whereas the mean of the percentages increases to .509 after the correction is applied.
+The pair of histograms in Figure \@ref(fig:histogram-panel-1) demonstrates the anticipated effects.  The upper histogram in the panel shows the distribution of voting percentages without correction for splintered voting.  The bottom histogram in the panel shows the distribution of voting percentages after the correction for splintered voting.  The most prominent feature of the upper histogram is a pronounced density mass on the left hand side that grows as the percentages on the x axis drop.  After the correction is applied, the pronounced mass is dramatically diminished and the acceleration as voting percentages drop is dissipated.  The mean of the percentages reflected in the upper histogram is .342 whereas the mean of the percentages increases to .509 after the correction is applied.
 
 ```{r histogram-panel-1, fig.cap="Voting Percentage Distribution"}
 
@@ -173,7 +173,7 @@ for the special elections to fill the unexpired terms in Hawaii’s 1st Congress
 Kentucky’s 1st Congressional District and Pennsylvania’s 2nd Congressional District.** The
 Commission undertakes this project on a biennial basis in order to respond to public inquiries.
 
-Table \@ref(tab:unexpired-terms) lists the unexpired term races in `results_house` together with the number of observations for each.  Note that there are inconsistent references to the contest relating to the unexpired term for the 1st District of Kentucky.  For flexibility, I will add a new variable to the dataframe to indicate whether a row in the dataset pertains to an election for an unexpired term.
+Table \@ref(tab:unexpired-terms) lists the unexpired term races in `results_house` together with the number of observations for each.  Note that there are inconsistent references to the contest relating to the unexpired term for the 1st District of Kentucky.  
 
 ```{r unexpired-terms}
 kable(results_house %>% 
@@ -185,22 +185,18 @@ kable(results_house %>%
 df <- df %>%
   mutate (unexpired_term = str_detect(district_id, "UNEXPIRED"))
 ```
-# Uncontested Elections
+# Other Considerations
 
-When analyzing voting contests, it may be useful to know when a candidate ran unopposed.
+There are other features in the data that may merit additional consideration.
 
-```{r uncontested-elections}
++ Uncontested Elections
 
-candidate_counts <- df %>% 
-  group_by(state, district_id) %>%
-  summarise(candidate_count = length(unique(cand_id)),
-            .groups = "keep")
+>We can look for districts in which only one candidate appears on the ballot.  
 
++ Elections for Non-Voting Delegates
 
-```
+>This is a discrete set of six seats and they are not really like the others.
 
-# Non-Voting Delegates
++ Write In Votes
 
-# Write In Ballots
-
-# Small Defects
+>While not necessarily impacting our analysis, the number of write in votes in a race is the difference between total votes cast in a district and the total votes received by candidates named as participants in that election.
